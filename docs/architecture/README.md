@@ -155,5 +155,4 @@ Este directorio está diseñado para que un **nuevo desarrollador** o un **asist
 
 - Bass, L., Clements, P., & Kazman, R. (2021). *Software Architecture in Practice* (4th ed.). Addison-Wesley.
 - ISO/IEC 25010:2023 — *Systems and software Quality Requirements and Evaluation (SQuaRE)*.
-- Moodle Docs. (2025). *Moodle Universal Cache (MUC) & Performance recommendation guidelines*. Moodle HQ.
-- Documento técnico: *Propuesta de Arquitectura de Software para la Plataforma Integradora LMS Aprende 360* (Castro & Ospina, 2026).
+
