@@ -1,0 +1,96 @@
+@startuml secuencia-proceso-clave
+' =============================================================================
+' Aprende 360 - Plataforma Integradora LMS
+' Diagrama de Secuencia - Proceso Clave: Rendir Examen de Alta Concurrencia
+' Escenario de referencia: ESC-01 / ASR-01 (5.000 usuarios simultaneos)
+' Autor: Kevin Castro, Julian Ospina
+' ADR relacionadas: ADR-0001 (K8s), ADR-0002 (Redis/MySQL/S3), ADR-0003 (Seguridad)
+' =============================================================================
+autonumber
+skinparam sequenceMessageAlign center
+title "Aprende 360 - Secuencia: Rendir Examen de Alta Concurrencia (ESC-01)"
+
+actor "Estudiante\n(Colegio/Universidad)" as Est
+participant "WAF L7 / ALB\n(Ingress)" as WAF
+participant "Pod Web Moodle\n(stateless / HPA)" as Pod
+participant "Redis Cluster\n(Sesion + MUC)" as Redis
+queue "Cola de Trabajo\n(Worker)" as Queue
+database "RDS Aurora MySQL\n(Writer)" as DBMaster
+database "RDS Aurora MySQL\n(Read Replica)" as DBReplica
+participant "Object Storage S3\n+ CloudFront" as S3
+
+== 1. Autenticacion y carga del cuestionario ==
+
+Est -> WAF : GET /exam (inicia intento)
+activate WAF
+WAF -> WAF : Valida TLS 1.3 + reglas WAF (ADR-0003)
+alt Token SSO valido
+    WAF -> Pod : Reenvia peticion
+else Token invalido
+    WAF --> Est : 401 Unauthorized
+end
+activate Pod
+
+Pod -> Redis : GET sesion PHP (moodle_sesskey)
+activate Redis
+Redis --> Pod : Sesion valida (< 2 ms)
+deactivate Redis
+
+Pod -> DBReplica : SELECT enunciado preguntas (lectura)
+activate DBReplica
+DBReplica --> Pod : Preguntas del quiz
+deactivate DBReplica
+
+Pod -> S3 : GET recurso multimedia (prefirmado)
+activate S3
+S3 --> Pod : Asset via CloudFront CDN (< 2 s)
+deactivate S3
+
+Pod --> WAF : 200 OK (cuestionario)
+WAF --> Est : Render del examen
+deactivate WAF
+
+== 2. Envio masivo de respuestas bajo concurrencia ==
+
+loop Cada respuesta del estudiante (pico de fin de semestre)
+    Est -> WAF : POST /process_attempt (respuesta)
+    activate WAF
+    WAF -> Pod : Reenvia (rate-limit OK)
+    activate Pod
+
+    Pod -> Redis : Valida y refresca sesion + MUC
+    activate Redis
+    Redis --> Pod : OK
+    deactivate Redis
+
+    Pod -> Queue : Encola escritura de calificacion (asincrono)
+    activate Queue
+    Pod --> WAF : 200 OK (respuesta aceptada)
+    WAF --> Est : Confirmacion inmediata (< 1,5 s, 0 errores 5xx)
+    deactivate WAF
+
+    Queue -> DBMaster : UPDATE estado_question_attempt (transaccion)
+    activate DBMaster
+    DBMaster -> DBMaster : Commit + registro de auditoria inmutable (ASR-09)
+    DBMaster --> Queue : ACK
+    deactivate DBMaster
+    deactivate Queue
+
+    Pod -> Queue : Consulta estado de calificacion
+    Queue --> Pod : Estado persistido
+    deactivate Pod
+end
+
+== 3. Failover (resiliencia) ==
+
+alt Caida del nodo Writer (ESC-02)
+    DBMaster -[#red]>x DBReplica : Failover Multi-AZ
+    DBReplica -> Queue : Asume como nuevo Writer (RTO < 60 s)
+end
+
+alt Desconexion del servicio S3 (ESC-08)
+    Pod -> Pod : Reintento automatico + cache local temporal
+    note right of Pod : 0 perdida de archivos entregados
+end
+
+@enduml

@@ -1,0 +1,48 @@
+@startuml c4-contexto
+' =============================================================================
+' Aprende 360 - Plataforma Integradora LMS
+' Diagrama C4 - Nivel 1: Contexto del Sistema
+' Autor: Kevin Castro, Julian Ospina
+' ADR relacionadas: ADR-0001, ADR-0002, ADR-0003
+' =============================================================================
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title "Aprende 360 (LMS) - Diagrama de Contexto C4 (Nivel 1)"
+
+Person(estudianteColegio, "Estudiante de Colegio", "Usuario final. Accede desde moviles con red limitada, rinde tareas livianas y examenes.")
+Person(estudianteUni, "Estudiante Universitario", "Usuario final. Rinde examenes concurrentes y entrega archivos pesados.")
+Person(docente, "Docente / Tutor", "Genera contenido, califica y consulta reportes de avance.")
+Person(adminLMS, "Administrador LMS", "Operador. Gestion masiva de matriculas, roles y extensiones.")
+Person(devops, "Equipo TI / DevOps", "Mantenedor. Despliegues, monitoreo y respaldos.")
+
+System(aprende360, "Aprende 360 (LMS)", "Plataforma de gestion del aprendizaje basada en Moodle 4.x, desplegada en contenedores. Provee examenes de alta concurrencia, entrega de tareas y gestion academica multitenant.")
+
+System_Ext(sso, "IdP Institucional (SSO)", "Google Workspace / Microsoft Entra ID / LDAP. Autenticacion federada OAuth2 / SAML2.")
+System_Ext(videoConf, "Videoconferencia", "Zoom / Microsoft Teams para clases sincronicas.")
+System_Ext(pagos, "Pasarela de Pagos", "Cobros de cursos de extension.")
+System_Ext(cloud, "Object Storage / CDN", "Amazon S3 + CloudFront. Almacenamiento de objetos y entrega de media.")
+System_Ext(observ, "Observabilidad Cloud", "Metricas, logs y alertas del cluster (CloudWatch / Stackdriver).")
+System_Ext(auditor, "Auditor / Seguridad", "Regulador. Verifica cumplimiento Habeas Data / GDPR y trazabilidad.")
+
+Rel(estudianteColegio, aprende360, "Usa (web/movil)", "HTTPS")
+Rel(estudianteUni, aprende360, "Rinde examenes y entrega tareas", "HTTPS")
+Rel(docente, aprende360, "Crea cursos y califica", "HTTPS")
+Rel(adminLMS, aprende360, "Administra matriculas y roles", "HTTPS / API")
+Rel(devops, aprende360, "Despliega y monitorea", "CI-CD / kubectl")
+
+Rel(aprende360, sso, "Valida identidad", "OAuth2 / SAML2 / LDAP")
+Rel(aprende360, videoConf, "Crea sesiones de video", "REST API")
+Rel(aprende360, pagos, "Procesa pagos", "REST API")
+Rel(aprende360, cloud, "Almacena y sirve archivos", "S3 API / CDN")
+Rel(aprende360, observ, "Emite metricas y logs", "Agentes")
+Rel(auditor, aprende360, "Audita cumplimiento y logs", "Reportes / API")
+
+' Trazabilidad con ADR
+note right of aprende360
+  ADR-0001: Despliegue en contenedores (Kubernetes)
+  ADR-0002: RDS Aurora MySQL + Redis Cluster + S3
+  ADR-0003: SSO, Multitenancy y Cifrado (Propuesto)
+end note
+
+SHOW_LEGEND()
+@enduml
